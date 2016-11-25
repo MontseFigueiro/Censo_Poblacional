@@ -1,0 +1,190 @@
+---
+title: "Análisis Pensiones Españolas"
+author: "Montse Figueiro"
+date: "23 de noviembre de 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##CENSO POBLACIÓN ESPAÑOLA DESDE 2005 A 2016
+###Desglose de la Población por Provincia y Sexo
+
+Hemos tomado los datos del INE desglosados por provincia y sexo para el periodo comprendido entre 2005 y 2016, los datos están tomados a enero de cada año. Las edades están comprendidas entre 0 y 100 años.
+
+
+install.packages("knitr")
+install.packages("reshape")
+install.packages("readxl")
+install.packages("devtools")
+install.packages("dplyr")
+install.packages("stringr")
+
+
+```{r}
+install.packages("reshape2")
+library(reshape2)
+library(reshape)
+library("devtools")
+library(readxl)
+library(stringr)
+library(dplyr)
+library(plyr)
+```
+
+Año 2005 Hombres:
+```{r}
+hombres2005 <- read_excel("2005hombres.xls")
+hombres2005 <- as.data.frame(hombres2005)
+head(hombres2005)
+nombres <- hombres2005$Provincia
+H2005 <- as.data.frame(t(hombres2005))
+names(H2005) <- NULL
+names(H2005) <- nombres
+H2005 <- H2005[-1,]
+H2005 <- H2005[-1,]
+
+#creamos columna edad
+edad <- seq(0,100,1)
+H2005$Edad <- edad
+H2005$sexo <- "H"
+H2005$año <- 2005
+```
+Año 2006 Hombres
+
+Todos los ficheros Excel del directorio:
+```{r}
+f = list.files(pattern="\\.xls")
+f
+```
+
+Abrimos todos los ficheros xls del directorio y nos devuelve el resultado como una lista:
+```{r}
+library(dplyr)
+library(plyr)
+dat = lapply(f, function(i){
+    x = read_excel(i)
+    # You may want to add a column to say which file they're from
+    x$file = i
+    # Return your data
+    x
+})
+summary(dat)
+class(dat)
+names(dat[[1]])
+names(dat[[2]])
+identical(names(dat[[1]]),names(dat[[22]]))
+```
+Comprobamos que las columnas tienen los mismos nombres en todos los ficheros
+```{r}
+d <- do.call("rbind",dat)
+head(d)
+dim(d)
+```
+Hay NA en el fichero creado
+```{r}
+missing <- d[!complete.cases(d),]
+missing
+d <- d[complete.cases(d),]
+d <- as.data.frame(d)
+```
+Ahora si tenemos el número de filas correcto 24 ficheros * 53 filas cada fichero
+
+Comprobamos un fichero al azar: "2008mujeres.xls"
+```{r}
+M2008 <- d[d$file=="2008mujeres.xls",]
+head(M2008)
+tail(M2008)
+```
+Coincide con nuestro fichero Excel ha importado los datos correctamente.
+
+Incluimos el nombre de la primera columna que será Provincia:
+
+```{r}
+colnames(d)[1] <- "Provincia"
+names(d)
+```
+De la columna "file" (character) vamos a extraer dos columnas "Año" y "Sexo":
+```{r}
+str(d$file)
+d$charfile <- nchar(d$file) #numero de caracteres que tiene el string de la columna "file"
+d$charfile <- NULL
+```
+
+```{r}
+x <- "2005hombres.xls"
+y <- substr(x,1,10)
+año <- substr(substr(x,1,10),-4,4)
+año
+sexo <- substr(substr(x,1,10),5,10)
+sexo
+```
+
+```{r}
+d$año <- substr(substr(d$file,1,10),-4,4)
+d$sexo <- substr(substr(d$file,1,11),5,11)
+d$año <- as.factor(d$año)
+d$sexo <- as.factor(d$sexo)
+summary(d$sexo)
+d$Provincia <- as.factor(d$Provincia)
+d$file <- as.factor(d$file)
+```
+Grabamos el fichero con los totales en un csv:
+```{r}
+write.csv(d,"Censo2005_2016.csv")
+```
+
+Aplicamos melt al fichero d (no lo abrimos porque da problemas con los titulos)
+```{r}
+CensoTotal <- melt(d)
+CensoTotal$file <- NULL
+head(CensoTotal)
+dim(CensoTotal) #102 edades x 24 ficheros x 53 provincias contando el Total
+```
+##Análisis a nivel Nacional
+
+Población a nivel nacional por sexos para cada año
+```{r}
+TotalNac <- d[d$Provincia=="Total Nacional",]
+melttotal <- melt(TotalNac)
+
+melttotal <- melttotal[,3:6]
+```
+
+
+```{r}
+TotalNac2005 <- d[d$Provincia=="Total Nacional"& d$año==2005,]
+prueba <- melt(TotalNac2005)
+prueba <- prueba[,4:6]
+c <- t(cast(prueba,id=c("variable")))
+c <- as.data.frame.table(c)
+```
+
+Grádico de una tabla de frecuencias para el año 2005
+```{r}
+library(ggplot2)
+totales2005 <- c[c$Var1!="Total",]
+
+
+
+g1 <- ggplot(data = totales2005, aes(x = Var1, y = Freq, fill = Var2)) +
+  geom_bar(data = subset(totales2005, Var2=="mujeres"),
+           stat = "identity") +
+  geom_bar(data = subset(totales2005, Var2=="hombres"),
+           stat = "identity",
+           position = "identity",
+           mapping = aes(y = -Freq)) +
+  scale_y_continuous(labels = abs) +
+  coord_flip()
+g1
+```
+
+##Análisis a nivel Provincia
+
+```{r}
+head(CensoTotal)
+Albacete <- CensoTotal[CensoTotal$Provincia=="02 Albacete",]
+```
+
