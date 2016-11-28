@@ -21,10 +21,10 @@ install.packages("readxl")
 install.packages("devtools")
 install.packages("dplyr")
 install.packages("stringr")
-
+install.packages("reshape2")
 
 ```{r}
-install.packages("reshape2")
+
 library(reshape2)
 library(reshape)
 library("devtools")
@@ -34,7 +34,7 @@ library(dplyr)
 library(plyr)
 ```
 
-Año 2005 Hombres:
+Año 2005 Hombres, como abrimos un fichero de forma individual:
 ```{r}
 hombres2005 <- read_excel("2005hombres.xls")
 hombres2005 <- as.data.frame(hombres2005)
@@ -52,7 +52,7 @@ H2005$Edad <- edad
 H2005$sexo <- "H"
 H2005$año <- 2005
 ```
-Año 2006 Hombres
+
 
 Todos los ficheros Excel del directorio:
 ```{r}
@@ -86,7 +86,6 @@ dim(d)
 Hay NA en el fichero creado
 ```{r}
 missing <- d[!complete.cases(d),]
-missing
 d <- d[complete.cases(d),]
 d <- as.data.frame(d)
 ```
@@ -112,7 +111,7 @@ str(d$file)
 d$charfile <- nchar(d$file) #numero de caracteres que tiene el string de la columna "file"
 d$charfile <- NULL
 ```
-
+Comprobamos con un ejemplo si nuestra fórmula es correcta:
 ```{r}
 x <- "2005hombres.xls"
 y <- substr(x,1,10)
@@ -121,7 +120,7 @@ año
 sexo <- substr(substr(x,1,10),5,10)
 sexo
 ```
-
+Extraemos el año y el sexo para toda la columna:
 ```{r}
 d$año <- substr(substr(d$file,1,10),-4,4)
 d$sexo <- substr(substr(d$file,1,11),5,11)
@@ -133,7 +132,7 @@ d$file <- as.factor(d$file)
 ```
 Grabamos el fichero con los totales en un csv:
 ```{r}
-write.csv(d,"Censo2005_2016.csv")
+write.csv(d,"Censo2005_2016.csv",row.names = FALSE)
 ```
 
 Aplicamos melt al fichero d (no lo abrimos porque da problemas con los titulos)
@@ -143,39 +142,46 @@ CensoTotal$file <- NULL
 head(CensoTotal)
 dim(CensoTotal) #102 edades x 24 ficheros x 53 provincias contando el Total
 ```
+Cambiamos nombres columnas
+```{r}
+colnames(CensoTotal) <- c("Provincia","Año","Sexo","Edad","Poblacion")
+write.csv(CensoTotal,"CensoTotal.csv",row.names = FALSE,col.names = TRUE)
+```
+Vamos a dejar la tabla sin Totales, ya que éstos se pueden calcular a partir del resto de datos, 
+
+
 ##Análisis a nivel Nacional
 
-Población a nivel nacional por sexos para cada año
+Población a nivel nacional por sexos para cada año:
 ```{r}
-TotalNac <- d[d$Provincia=="Total Nacional",]
+TotalNac <- CensoTotal[CensoTotal$Provincia=="Total Nacional",]
 melttotal <- melt(TotalNac)
-
-melttotal <- melttotal[,3:6]
+cols <- c("Año","Sexo","Edad","value")
+melttotal <- melttotal[,cols]
 ```
 
-
+Total Nacional para un año:
 ```{r}
-TotalNac2005 <- d[d$Provincia=="Total Nacional"& d$año==2005,]
-prueba <- melt(TotalNac2005)
-prueba <- prueba[,4:6]
-c <- t(cast(prueba,id=c("variable")))
-c <- as.data.frame.table(c)
+TotalNac2005 <- filter(melttotal,Año=="2005")
+TN2005 <- melt(TotalNac2005)
+cols <- c("Sexo","Edad","value")
+TN2005 <- TN2005[,cols]
 ```
 
 Grádico de una tabla de frecuencias para el año 2005
 ```{r}
 library(ggplot2)
-totales2005 <- c[c$Var1!="Total",]
+totales2005 <- TN2005[TN2005$Edad!="Total",]#quitamos el total nacional que suma todas las edades
 
 
-
-g1 <- ggplot(data = totales2005, aes(x = Var1, y = Freq, fill = Var2)) +
-  geom_bar(data = subset(totales2005, Var2=="mujeres"),
+library(ggplot2)
+g1 <- ggplot(data = totales2005, aes(x = Edad, y = value, fill = Sexo)) +
+  geom_bar(data = subset(totales2005, Sexo=="mujeres"),
            stat = "identity") +
-  geom_bar(data = subset(totales2005, Var2=="hombres"),
+  geom_bar(data = subset(totales2005, Sexo=="hombres"),
            stat = "identity",
            position = "identity",
-           mapping = aes(y = -Freq)) +
+           mapping = aes(y = -value)) +
   scale_y_continuous(labels = abs) +
   coord_flip()
 g1
@@ -188,3 +194,36 @@ head(CensoTotal)
 Albacete <- CensoTotal[CensoTotal$Provincia=="02 Albacete",]
 ```
 
+##Nivel Nacional 
+
+```{r}
+head(CensoTotal)
+Nacional <- CensoTotal[CensoTotal$Provincia=="Total Nacional",]
+Nacional <- Nacional[Nacional$Edad!="Total",]
+head(Nacional)
+```
+
+Evolución Nacimientos en España desde 2005 a 2016:
+
+```{r}
+Nacional0 <- Nacional[Nacional$Edad=="0 años",]
+Nacional0
+str(Nacional0)
+ggplot(data=Nacional0, aes(x=Año, y=Poblacion, group=Sexo)) +
+  geom_line(aes(linetype="dashed",color=Sexo))+
+  geom_point()
+```
+
+
+Evolución Mayores 60 años:
+```{r}
+#Cambiamos columna Edad a numérico
+edad <- "23 años"
+edad <- "0 años"
+edad <- ifelse(nchar(edad)substr(substr(edad,1,10),-4,2)
+num <- as.numeric(edad)
+```
+
+```{r}
+CensoTotal$edadnum <- ifelse((nchar(as.character(CensoTotal$Edad)))==5,substr(substr(CensoTotal$Edad,1,10),-4,1),ifelse((nchar(as.character(CensoTotal$Edad)))==7,substr(substr(CensoTotal$Edad,1,10),-4,2),substr(substr(CensoTotal$Edad,1,10),-4,3))
+```
